@@ -46,7 +46,15 @@ export async function fetchJson(url: string, opts: RequestOptions = {}) {
         }
       }
 
-      throw new HttpError(res.status, json?.message ?? `HTTP ${res.status}`, json?.hint, json);
+      // 代表的なステータスにヒントを付与
+      let hint: string | undefined = json?.hint;
+      if (!hint) {
+        if (res.status === 401) hint = 'reauthorize';
+        else if (res.status === 403) hint = 'forbidden';
+        else if (res.status === 404) hint = 'not_found';
+        else if (res.status === 400) hint = 'bad_request';
+      }
+      throw new HttpError(res.status, json?.message ?? `HTTP ${res.status}`, hint, json);
     } catch (e: any) {
       if (e?.name === 'AbortError') {
         throw new HttpError(408, 'リクエストがタイムアウトしました', 'timeout', e);
@@ -64,4 +72,3 @@ export async function fetchJson(url: string, opts: RequestOptions = {}) {
     }
   }
 }
-
