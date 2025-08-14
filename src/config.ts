@@ -9,6 +9,8 @@ const EnvSchema = z.object({
   ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEYは32文字以上（推奨32バイト）で指定してください'),
   FEATURE_FLAGS: z.string().optional().default(''),
   PORT: z.coerce.number().int().positive().default(3000),
+  WATCHERS_CONCURRENCY: z.coerce.number().int().positive().max(20).default(5),
+  REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(15000),
 });
 
 export type AppConfig = z.infer<typeof EnvSchema> & {

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
+const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9_]+-\d+$/;
+
 export const AddWatchersInput = z.object({
-  issueKey: z.string().min(1),
+  issueKey: z.string().regex(ISSUE_KEY_REGEX, 'issueKeyの形式が不正です (例: PROJ-123)'),
   accountIds: z.array(z.string().min(1)).min(1).max(20),
   cloudId: z.string().optional(),
 });

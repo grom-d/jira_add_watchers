@@ -64,47 +64,94 @@ const server = http.createServer(async (req, res) => {
 
   // 簡易API: MCPツールと同等の動作をHTTPで確認
   if (url.pathname === '/api/watchers/add' && req.method === 'POST') {
+    if (config.flags['feature.watchers'] === false) return send(res, 503, { error: 'feature_disabled' });
     const body = await parseBody(req);
     const parsed = AddWatchersInput.safeParse(body);
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
     const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
-    const cloudId = await getCloudId('default', parsed.data.cloudId);
+    const input = parsed.data;
+    const cloudId = await getCloudId('default', input.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
-    const client = new JiraClient({ cloudId, accessToken: user.accessToken });
-    const results = [] as Array<{ accountId: string; ok: boolean; error?: string }>;
-    for (const id of parsed.data.accountIds) {
-      try { await addWatcher(client, parsed.data.issueKey, id); results.push({ accountId: id, ok: true }); }
-      catch (e: any) { results.push({ accountId: id, ok: false, error: e?.message }); }
+    const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
+    const limit = Math.max(1, Math.min(config.WATCHERS_CONCURRENCY, 20));
+    const ids = input.accountIds;
+    const results: Array<{ accountId: string; ok: boolean; error?: string }> = [];
+    let idx = 0;
+    async function worker() {
+      while (idx < ids.length) {
+        const my = idx++;
+        const id = ids[my];
+        try {
+          await addWatcher(client, input.issueKey, id);
+          results.push({ accountId: id, ok: true });
+        } catch (e: any) {
+          results.push({ accountId: id, ok: false, error: e?.message });
+        }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(limit, ids.length) }, () => worker()));
+    logger.info({
+      action: 'ADD',
+      actor: 'default',
+      issueKey: input.issueKey,
+      cloudId,
+      total: ids.length,
+      ok: results.filter(r => r.ok).length,
+      ng: results.filter(r => !r.ok).length,
+    }, 'watchers add results');
     return send(res, 200, { results });
   }
 
   if (url.pathname === '/api/watchers/remove' && req.method === 'POST') {
+    if (config.flags['feature.watchers'] === false) return send(res, 503, { error: 'feature_disabled' });
     const body = await parseBody(req);
     const parsed = RemoveWatchersInput.safeParse(body);
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
     const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
-    const cloudId = await getCloudId('default', parsed.data.cloudId);
+    const input = parsed.data;
+    const cloudId = await getCloudId('default', input.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
-    const client = new JiraClient({ cloudId, accessToken: user.accessToken });
-    const results = [] as Array<{ accountId: string; ok: boolean; error?: string }>;
-    for (const id of parsed.data.accountIds) {
-      try { await deleteWatcher(client, parsed.data.issueKey, id); results.push({ accountId: id, ok: true }); }
-      catch (e: any) { results.push({ accountId: id, ok: false, error: e?.message }); }
+    const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
+    const limit = Math.max(1, Math.min(config.WATCHERS_CONCURRENCY, 20));
+    const ids = input.accountIds;
+    const results: Array<{ accountId: string; ok: boolean; error?: string }> = [];
+    let idx = 0;
+    async function worker() {
+      while (idx < ids.length) {
+        const my = idx++;
+        const id = ids[my];
+        try {
+          await deleteWatcher(client, input.issueKey, id);
+          results.push({ accountId: id, ok: true });
+        } catch (e: any) {
+          results.push({ accountId: id, ok: false, error: e?.message });
+        }
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(limit, ids.length) }, () => worker()));
+    logger.info({
+      action: 'REMOVE',
+      actor: 'default',
+      issueKey: input.issueKey,
+      cloudId,
+      total: ids.length,
+      ok: results.filter(r => r.ok).length,
+      ng: results.filter(r => !r.ok).length,
+    }, 'watchers remove results');
     return send(res, 200, { results });
   }
 
   if (url.pathname === '/api/watchers' && req.method === 'GET') {
+    if (config.flags['feature.watchers'] === false) return send(res, 503, { error: 'feature_disabled' });
     const parsed = GetWatchersInput.safeParse({ issueKey: url.searchParams.get('issueKey'), cloudId: url.searchParams.get('cloudId') ?? undefined });
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
     const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
     const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
-    const client = new JiraClient({ cloudId, accessToken: user.accessToken });
+    const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
     const data = await getWatchers(client, parsed.data.issueKey);
     return send(res, 200, data);
   }

@@ -3,6 +3,7 @@ import { fetchJson } from '../http/retryClient.js';
 export type JiraClientOptions = {
   cloudId: string;
   accessToken: string;
+  timeoutMs?: number;
 };
 
 export class JiraClient {
@@ -22,19 +23,19 @@ export class JiraClient {
   }
 
   async get(path: string) {
-    return fetchJson(`${this.base3}${path}`, { headers: this.headers() });
+    return fetchJson(`${this.base3}${path}`, { headers: this.headers(), timeoutMs: this.opts.timeoutMs });
   }
 
   async post(path: string, body: any) {
     const payload = typeof body === 'string' ? body : JSON.stringify(body);
-    return fetchJson(`${this.base3}${path}`, { method: 'POST', headers: this.headers(), body: payload });
+    return fetchJson(`${this.base3}${path}`, { method: 'POST', headers: this.headers(), body: payload, timeoutMs: this.opts.timeoutMs });
   }
 
   async del(path: string) {
-    return fetchJson(`${this.base3}${path}`, { method: 'DELETE', headers: this.headers() });
+    return fetchJson(`${this.base3}${path}`, { method: 'DELETE', headers: this.headers(), timeoutMs: this.opts.timeoutMs });
   }
 
   async getV2(path: string) {
-    return fetchJson(`${this.base2}${path}`, { headers: this.headers() });
+    return fetchJson(`${this.base2}${path}`, { headers: this.headers(), timeoutMs: this.opts.timeoutMs });
   }
 }
