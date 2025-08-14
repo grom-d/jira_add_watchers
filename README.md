@@ -41,6 +41,9 @@ Jira Cloud のウォッチャー機能（追加・削除・取得）と、アカ
 - `GET /health` -> `{ status: 'ok' }`
 - `GET /ready` -> `{ status: 'ready' }`
 
+切断/再同意:
+- `POST /auth/disconnect` -> ローカルトークン破棄 + revoke試行
+
 ## API 一覧（HTTP）
 
 1) 取得: `GET /api/watchers?issueKey=PROJ-123[&cloudId=...]`
@@ -111,6 +114,19 @@ Feature Flag:
 - `npm run build` ビルド
 - `npm start` ビルド成果物起動
 - `npm run lint` / `npm run test` 整備予定
+
+## MCPツール/スキーマ
+- `GET /mcp/tools` でツール一覧（スキーマURL付き）を取得
+- スキーマは `/schemas/*.json` で提供
+
+## CI/Docker
+- GitHub Actions: `.github/workflows/ci.yml`（build/test）
+- Docker: `Dockerfile`（最小ランタイムイメージ）
+
+## 追加資料
+- docs/integration.md（統合テスト手順）
+- docs/e2e.md（MCP連携E2E手順）
+- docs/faq.md（FAQ/トラブルシュート）
 
 ## 実装状況（抜粋）
 - Foundations: ENVローダ/型安全設定, 共通HTTP例外

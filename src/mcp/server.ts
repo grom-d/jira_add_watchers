@@ -4,7 +4,7 @@ import { loadConfig } from '../config.js';
 import { logger, withReqId } from '../logger.js';
 import { URL } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { generateAuthUrl, handleCallback, getAccessibleResources } from '../oauth/atlassian.js';
+import { generateAuthUrl, handleCallback, getAccessibleResources, revokeToken } from '../oauth/atlassian.js';
 import { TokenStore } from '../storage/tokenStore.js';
 import { JiraClient } from '../jira/client.js';
 import { addWatcher, deleteWatcher, getWatchers } from '../jira/watchers.js';
@@ -65,6 +65,15 @@ const server = http.createServer(async (req, res) => {
       log.error({ err: e?.message }, 'oauth callback error');
       return send(res, 500, { error: 'oauth_failed' });
     }
+  }
+
+  if (url.pathname === '/auth/disconnect' && req.method === 'POST') {
+    const user = await TokenStore.get('default');
+    try {
+      if (user?.refreshToken) await revokeToken(user.refreshToken, config);
+    } catch {}
+    if (user) await TokenStore.clear('default');
+    return send(res, 200, { ok: true });
   }
 
   // 簡易API: MCPツールと同等の動作をHTTPで確認
@@ -216,6 +225,32 @@ const server = http.createServer(async (req, res) => {
     const outcome: 'resolved' | 'ambiguous' | 'none' = out.resolved ? 'resolved' : out.ambiguous ? 'ambiguous' : 'none';
     metrics.recordResolve({ t: Date.now(), ok: outcome !== 'none', ms: Date.now() - started, outcome });
     return send(res, 200, out);
+  }
+
+  // MCP: ツール一覧とスキーマ配信
+  if (url.pathname === '/mcp/tools' && req.method === 'GET') {
+    const base = `${url.origin}`;
+    const tools = [
+      { name: 'jira_add_watchers', inputSchema: `${base}/schemas/add_watchers.input.json`, outputSchema: `${base}/schemas/add_watchers.output.json` },
+      { name: 'jira_remove_watchers', inputSchema: `${base}/schemas/remove_watchers.input.json`, outputSchema: `${base}/schemas/add_watchers.output.json` },
+      { name: 'jira_get_watchers', inputSchema: null, outputSchema: `${base}/schemas/get_watchers.output.json` },
+      { name: 'jira_resolve_accountIds', inputSchema: `${base}/schemas/resolve_accountIds.input.json`, outputSchema: `${base}/schemas/resolve_accountIds.output.json` }
+    ];
+    return send(res, 200, { tools });
+  }
+
+  if (url.pathname.startsWith('/schemas/') && req.method === 'GET') {
+    try {
+      const fs = await import('node:fs/promises');
+      const path = await import('node:path');
+      const p = path.default.resolve('.', url.pathname.replace(/^\/+/, ''));
+      const data = await fs.readFile(p, 'utf8');
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(data);
+      return;
+    } catch {
+      return send(res, 404, { error: 'not_found' });
+    }
   }
 
   send(res, 404, { error: 'not_found' });

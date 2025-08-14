@@ -1,0 +1,21 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "jira_get_watchers.output",
+  "type": "object",
+  "required": ["watchCount", "watchers"],
+  "properties": {
+    "watchCount": { "type": "integer", "minimum": 0 },
+    "watchers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["accountId", "displayName"],
+        "properties": {
+          "accountId": { "type": "string" },
+          "displayName": { "type": "string" },
+          "active": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}
