@@ -55,9 +55,16 @@ export async function resolveAccounts(
     // exactモードは完全一致のみ
     if (mode === 'exact') {
       const exact = byScore.filter((c) => c.score === 3);
-      if (exact.length === 1) return { resolved: exact.map(({ accountId, displayName }) => ({ accountId, displayName })) };
-      if (exact.length > 1) return { ambiguous: exact.map(({ accountId, displayName }) => ({ accountId, displayName })) };
-      return { none: true };
+      let out: ResolveResult;
+      if (exact.length === 1) out = { resolved: exact.map(({ accountId, displayName }) => ({ accountId, displayName })) };
+      else if (exact.length > 1) out = { ambiguous: exact.map(({ accountId, displayName }) => ({ accountId, displayName })) };
+      else out = { none: true };
+      // 最終バリデーション: issueKeyが指定されている場合、viewissue検索で再確認
+      if (out.resolved && params.issueKey) {
+        const ok = await validateViewability(client, params.issueKey, out.resolved);
+        return ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+      }
+      return out;
     }
 
     // fuzzy
@@ -65,10 +72,22 @@ export async function resolveAccounts(
     const top = byScore.filter((c) => c.score === topScore);
     if (dis === 'auto' && top.length === 1 && topScore >= 2) {
       // 前方一致以上で単一候補のみ自動確定
-      return { resolved: top.map(({ accountId, displayName }) => ({ accountId, displayName })) };
+      const out = { resolved: top.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
+      if (params.issueKey) {
+        const ok = await validateViewability(client, params.issueKey, out.resolved!);
+        return ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+      }
+      return out;
     }
     // 1件のみなら確定
-    if (byScore.length === 1) return { resolved: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) };
+    if (byScore.length === 1) {
+      const out = { resolved: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
+      if (params.issueKey) {
+        const ok = await validateViewability(client, params.issueKey, out.resolved!);
+        return ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+      }
+      return out;
+    }
     // 複数→ambiguous（並びはスコア順）
     return { ambiguous: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) };
   } catch (e) {
@@ -79,4 +98,23 @@ export async function resolveAccounts(
     }
     return { none: true, hint: '検索に失敗しました（ネットワーク/サーバー）' };
   }
+}
+
+async function validateViewability(
+  client: JiraClient,
+  issueKey: string,
+  targets: { accountId: string; displayName: string }[]
+) {
+  const ok: { accountId: string; displayName: string }[] = [];
+  for (const t of targets) {
+    try {
+      const data = (await client.getV2(
+        `/user/viewissue/search?issueKey=${encodeURIComponent(issueKey)}&query=${encodeURIComponent(t.displayName)}&maxResults=20`
+      )) as any[];
+      if (Array.isArray(data) && data.some((u) => u.accountId === t.accountId)) ok.push(t);
+    } catch {
+      // ignore and treat as not viewable
+    }
+  }
+  return ok;
 }

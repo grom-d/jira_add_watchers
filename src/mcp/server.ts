@@ -166,6 +166,9 @@ const server = http.createServer(async (req, res) => {
       cloudId: url.searchParams.get('cloudId') ?? undefined,
     });
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
+    // fuzzy機能のFeature Flag: OFFなら強制exact
+    const _data = parsed.data;
+    const mode = config.flags['feature.resolve_fuzzy'] === false ? 'exact' : _data.mode;
     const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
     const cloudId = await getCloudId('default', parsed.data.cloudId);
@@ -175,7 +178,7 @@ const server = http.createServer(async (req, res) => {
       query: parsed.data.query,
       issueKey: parsed.data.issueKey,
       maxResults: parsed.data.limit,
-      mode: parsed.data.mode,
+      mode,
       disambiguation: parsed.data.disambiguation,
     });
     return send(res, 200, out);
