@@ -1,0 +1,41 @@
+Epic,Title,Description,AcceptanceCriteria,Size,Labels
+Foundations,ENVローダ/型安全設定,"zodで必須ENV(ATLAS_CLIENT_ID/SECRET, REDIRECT_URI, ENCRYPTION_KEY, FEATURE_FLAGS等)を検証し、起動時にFail-fastする。`src/config.ts` を作成する。",全ENVの欠落時に起動エラー; 既定値/型がテストで保証される。,S,"backend,config"
+Foundations,共通エラー型/HTTP例外,HTTP例外(ステータス/メッセージ/ヒント/原因)の型を `src/lib/errors.ts` に定義し、下層から上層まで伝播可能にする。,APIエラー(400/403/404/429/5xx)を型安全にハンドリングできる。,S,"backend,errors"
+OAuth,認可エンドポイントとコールバック,"GET /auth/atlassian/login で同意画面へリダイレクトし、/auth/atlassian/callback でcode受領→token交換。state検証。audience=api.atlassian.com, scope=offline_access read:user:jira read:issue.watcher:jira write:issue.watcher:jira。",正しくトークン/リフレッシュトークン取得; CSRF(state)が検証される。,M,oauth
+OAuth,accessible-resources取得とcloudId保存,POST交換後のアクセストークンで /oauth/token/accessible-resources を取得しcloudId一覧を得る。ユーザー毎の既定cloudIdを保存するAPIとストレージを用意。,複数サイト時にcloudId選択→保存/切替が可能。,M,oauth
+OAuth,TokenStore(暗号化/期限前更新),AES-256-GCMでトークンを暗号化保存。期限前のリフレッシュ更新と失効検知→再接続フローに対応(回転式refresh_tokenは次フェーズへ)。,期限切れ前に自動更新; 失効時は再同意を促すステータスを返す。,M,"oauth,security"
+OAuth,アクセストークン更新ミドルウェア,API呼び出し前に期限を確認し必要に応じてリフレッシュするミドルウェアを実装。,更新が透過的に機能し、失敗時は明確な再接続エラーを返せる。,S,oauth
+JiraClient,HTTP基盤/再試行・バックオフ,undiciでHTTPクライアントを実装。429/5xxは指数バックオフ+Jitter、Retry-After尊重。タイムアウト/リトライ回数は設定化。,レートスパイク時に自動回復; 主要APIの失敗がメトリクス化される。,M,"backend,http"
+JiraClient,callV2Json/callV3Jsonヘルパ,api.atlassian.com/ex/jira/{cloudId}/rest/api/{2|3} で呼べる汎用ヘルパを追加。,v2/v3の混在を安全に扱える; 単体テストあり。,S,backend
+JiraClient,Watchers APIラッパ(追加/削除/取得),"addWatcher(issueKey, accountId) (POST bodyはJSON.stringify(accountId)), deleteWatcher(issueKey, accountId), getWatchers(issueKey) を実装。",204/200の正常系; 400/403/404の正規化; 単体テスト完了。,M,"backend,jira"
+Resolver,Schema変更(fuzzy/ask/auto),jira_resolve_accountIdsの入力に query/issueKey/projectKey/mode(fuzzy|exact)/disambiguation(ask|auto)/limit を追加。出力に resolved/candidates/ambiguous/none を追加。,スキーマで不正入力を拒否; 互換保持; OpenAPI/JSON Schema更新。,S,"resolver,api"
+Resolver,日本語向け正規化,敬称(さん/様/君/ちゃん/氏/殿)除去、全角半角・大文字小文字正規化、トークン化(中黒/スペース)を実装。,『田中さん』→『田中』などの正規化がユニットテストで担保される。,S,"resolver,nlp"
+Resolver,viewissue検索(優先),GET /rest/api/2/user/viewissue/search?issueKey=...&query=...&maxResults=... を実装し、課題を閲覧可能なユーザーに限定して部分一致検索。,与えたissueKeyで候補が返る; 0件/多件のテストあり。,M,"resolver,jira"
+Resolver,ランキング/あいまい判定,完全一致>前方一致>部分一致 + active優先でスコアリング。disambiguation=autoは単一候補時のみ確定; それ以外はambiguousで候補を返す。,単一候補→resolved、複数→ambiguous、0件→none の挙動がテストで担保。,S,"resolver,logic"
+Resolver,最終バリデーション,確定候補について viewissue検索で閲覧可能性を再確認し、不可なら除外。,閲覧不可ユーザーはresolvedされない; 候補から除外。,S,"resolver,security"
+Resolver,権限/可視性のエラーヒント,Browse users and groups不足や検索0件時の代表的要因に対して、人間語のhintを付与して返す。,403/権限不足がユーザーに分かるメッセージで返る。,S,"resolver,ux"
+Tools,jira_add_watchersハンドラ(冪等/部分成功),emails→accountIds解決は行わず、与えられたaccountIds配列に対してN並列でPOST。成功/部分失敗を集計して返す。,20件追加でも安定; 重複追加は成功扱い; 失敗はid単位で理由が返る。,M,tools
+Tools,jira_remove_watchers/jira_get_watchers,削除(DELETE?accountId=...)と取得(GET /watchers)のハンドラを実装。,取得の戻りをスキーマ化; 削除の204を正しく処理。,S,tools
+Ops,監査ログ/PII最小化,actor/issueKey/targetIds/action(RESOLVE/ADD/REMOVE)/結果を構造化ログに記録。メールはハッシュ化。,Kibana等で検索可能; 機微情報を含まない。,S,"ops,security"
+Ops,簡易メトリクス/レート監視(ログカウンタ),"成功率/レイテンシ/429率/解決成功率を構造化ログ+インメモリカウンタで計測。Prometheusは次フェーズ。","主要指標をログから集計可能; 閾値超過時にWARN出力。",S,"ops,metrics"
+Ops,Feature Flag,feature.watchers / feature.resolve_fuzzy のフラグを追加し段階的に展開可能にする。,フラグOFFで機能を無効化できる。,S,"ops,feature-flag"
+Tests,ユニット: 正規化/ランキング,『田中さん』『田中・太郎』『Tanaka』等を入力し期待どおりに正規化/順位付けされるテストを作成。,全ケース通過; 回帰テスト追加。,S,"test,unit"
+Tests,ユニット: API例外/レート制限,429/Retry-After/5xx/403/404/400の代表パスをnockでモックし、ハンドラの挙動を確認。,例外が正しく整形されて返る。,S,"test,unit"
+Tests,統合: サンドボックスJira,テスト用プロジェクトで viewissue検索→候補→resolved→add/remove の一連を実機で検証。,成功/複数候補/0件/権限不足の各ケースを再現し記録。,L,"test,integration"
+Tests,E2E: MCPクライアント連携,『田中さんをPROJ-123のウォッチャーに追加』を起点に、resolver(disambiguation=ask)→選択→addまでのE2Eを実施。,手順書を保存; 主要分岐が通る。,M,"test,e2e"
+Docs,README/セットアップ手順,OAuthアプリ登録、ENV設定、Jira権限、サンドボックス準備、実行方法をREADMEに記載。,新人が1時間で動かせる。,M,docs
+Docs,トラブルシュート/FAQ,0件時・複数候補時・権限不足時の対処、メール非公開ユーザーの注意点を記載。,問い合わせが半減する品質。,S,docs
+Release,CI/CD(最小),lint/test/build→stagingまでの最小パイプラインを整備。ロールバックはFeature Flagで即時停止。,Pipelineが緑; stagingで基本機能確認。,M,"release,ci-cd"
+MCP,MCPサーバのスキャフォールドとツール登録,"MCPサーバを初期化し、jira_add_watchers/jira_remove_watchers/jira_get_watchers/jira_resolve_accountIds のツールを登録。/healthを提供。",MCPクライアントからツールが列挙・実行可能; /healthが200。,M,"mcp,backend"
+MCP,ツールI/Oスキーマ(JSON Schema)/対話仕様,"各ツールの入出力をJSON Schemaで定義し、disambiguation=ask時の選択肢提示/再呼出し仕様を文書化。",スキーマが公開/バリデーション通過; askフローが往復で成立。,S,"mcp,schema"
+Foundations,Node/TSスキャフォールド,"package.json/tsconfig/eslint+prettier/テスト(vitestまたはjest+nock)/スクリプト(build/test/lint)整備。",lint/test/buildが成功する。,S,"backend,build"
+Storage,永続化バックエンド選定と実装,"Token/既定cloudIdをファイル+keytar(またはSQLite)で安全に保存。マイグレーション方針を定義。",再起動後も状態保持; 機微情報は暗号化。,M,"storage,security"
+OAuth,PKCE対応/Disconnectフロー,"認可コードフローにPKCEを導入し、/auth/disconnectでrevokeとローカル破棄を実装。401/invalid_grant時の再同意誘導も整備。",PKCEで取得成功; 失効時に再同意へ誘導。,M,"oauth,security"
+Tools,入力zodスキーマ厳格化(上限/並列),"issueKey形式検証、accountIds最大20、並列上限/タイムアウトをENVで強制。エラーメッセージも定義。",不正入力は起動前に弾かれ、詳細理由を返す。,S,"tools,validation"
+JiraClient,横断エラー(401/ネットワーク)マッピング,"401/タイムアウト/DNS/SSL/プロキシ等の例外を共通型に正規化し、リトライ/再認可の指針を付与。",例外が一貫した形式で上位へ伝播。,S,"backend,http"
+Config,CloudId指定/既定化オプション,"呼出し毎にcloudIdを上書き可能にし、未設定時は既定cloudIdを利用/選択プロンプトで保存。",複数サイトでも意図どおりのサイトに実行される。,S,"config,oauth"
+Cache,LRUキャッシュ(解決/リソース),"名前→accountId解決とaccessible-resourcesをTTL付きLRUでキャッシュし、レートを低減。",キャッシュHITでAPI呼出しが減少; 期限切れで自動更新。,S,"cache,performance"
+Ops,ログ標準化/相関ID/PIIレダクション,"pino初期化・相関ID付与・PII(メール等)のマスキング方針を統一。監査ログと整合。",リクエスト単位で追跡可能; PIIがログに残らない。,S,"ops,logging"
+Ops,ヘルスチェック/レディネス/自己診断,"/health と /ready を実装し、暗号鍵/ストレージ/ENVの自己診断を起動時に実施。",不備があればFail-fast; エンドポイントが期待どおり応答。,S,"ops,health"
+Release,Dockerfile/ENVテンプレート,"最小ランタイムのDockerfileと .env.example を追加し、実行手順を整備。",ローカル/CIで同一手順で起動可能。,S,"release,devex"
+Docs,i18nメッセージ辞書(ja),"ユーザー向けメッセージ/エラーヒントを日本語辞書で管理し、整形レスポンスから参照。",主要メッセージが日本語で一貫; 変更が集中管理できる。,S,"docs,i18n"

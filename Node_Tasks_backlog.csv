@@ -1,0 +1,6 @@
+Epic,Title,Description,AcceptanceCriteria,Size,Labels
+OAuth,TokenStore回転式refresh_token対応,"回転式refresh_tokenに対応し、旧トークンを安全に廃棄。多重回転や競合更新を防止。",回転発生時も透過的に更新; 競合が発生しない。,L,"oauth,security,backlog"
+Ops,Prometheusメトリクス/ダッシュボード/アラート,"主要指標(成功率/レイテンシ/429率/解決成功率等)をPrometheusで公開し、Grafanaダッシュボードとアラートを整備。",ダッシュボードでSLO可視化; アラートが閾値で発火。,M,"ops,metrics,backlog"
+Release,カナリア展開,"staging後に特定プロジェクトのみ有効化するカナリア配信。Feature Flagと連携。",カナリア期間の指標が安定; 迅速なロールバックが可能。,M,"release,ci-cd,backlog"
+Resolver,groupuserpickerフォールバック,"viewissue検索が0件/issueKeyなしの場合、GET /rest/api/3/groupuserpicker で候補取得。",候補が取得できる; メール非公開ユーザーでも表示名でヒット。,M,"resolver,jira,backlog"
+Tests,E2E動画作成,"E2E手順を動画で記録しナレッジ化。",動画が共有ストレージで参照可能; 主要分岐をカバー。,S,"test,e2e,backlog"
