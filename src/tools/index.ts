@@ -15,6 +15,17 @@ export const GetWatchersInput = z.object({
   cloudId: z.string().optional(),
 });
 
+export const Watcher = z.object({
+  accountId: z.string().min(1),
+  displayName: z.string().min(1),
+  active: z.boolean().optional(),
+});
+
+export const GetWatchersOutput = z.object({
+  watchCount: z.number().int().nonnegative(),
+  watchers: z.array(Watcher),
+});
+
 export const ResolveAccountsInput = z.object({
   query: z.string().min(1),
   issueKey: z.string().optional(),
@@ -28,4 +39,5 @@ export const ResolveAccountsInput = z.object({
 export type AddWatchersInput = z.infer<typeof AddWatchersInput>;
 export type RemoveWatchersInput = z.infer<typeof RemoveWatchersInput>;
 export type GetWatchersInput = z.infer<typeof GetWatchersInput>;
+export type GetWatchersOutput = z.infer<typeof GetWatchersOutput>;
 export type ResolveAccountsInput = z.infer<typeof ResolveAccountsInput>;

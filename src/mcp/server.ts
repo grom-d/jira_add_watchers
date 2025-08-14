@@ -153,7 +153,18 @@ const server = http.createServer(async (req, res) => {
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
     const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
     const data = await getWatchers(client, parsed.data.issueKey);
-    return send(res, 200, data);
+    // Jiraの生レスポンスを最小形に整形
+    const shaped = {
+      watchCount: Number(data?.watchCount ?? (Array.isArray(data?.watchers) ? data.watchers.length : 0)),
+      watchers: Array.isArray(data?.watchers)
+        ? data.watchers.map((w: any) => ({ accountId: w.accountId, displayName: w.displayName, active: w.active }))
+        : [],
+    };
+    // スキーマ検証
+    // 過剰プロパティはクライアントに返さない
+    const { GetWatchersOutput } = await import('../tools/index.js');
+    const ok = GetWatchersOutput.parse(shaped);
+    return send(res, 200, ok);
   }
 
   if (url.pathname === '/api/resolve' && req.method === 'GET') {
