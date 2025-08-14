@@ -59,4 +59,22 @@ describe('fetchJson: 429/5xxは再試行', () => {
     await expect(fetchJson('http://example.com', { retry: { retries: 0, baseMs: 1, maxMs: 1 } }))
       .rejects.toMatchObject({ status: 403, hint: 'forbidden' });
   });
+
+  it('401はhint=reauthorize', async () => {
+    (global as any).fetch = vi.fn(async () => makeResponse(401, { message: 'auth' }));
+    await expect(fetchJson('http://example.com', { retry: { retries: 0, baseMs: 1, maxMs: 1 } }))
+      .rejects.toMatchObject({ status: 401, hint: 'reauthorize' });
+  });
+
+  it('404はhint=not_found', async () => {
+    (global as any).fetch = vi.fn(async () => makeResponse(404, { message: 'missing' }));
+    await expect(fetchJson('http://example.com', { retry: { retries: 0, baseMs: 1, maxMs: 1 } }))
+      .rejects.toMatchObject({ status: 404, hint: 'not_found' });
+  });
+
+  it('400はhint=bad_request', async () => {
+    (global as any).fetch = vi.fn(async () => makeResponse(400, { message: 'bad' }));
+    await expect(fetchJson('http://example.com', { retry: { retries: 0, baseMs: 1, maxMs: 1 } }))
+      .rejects.toMatchObject({ status: 400, hint: 'bad_request' });
+  });
 });
