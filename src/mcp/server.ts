@@ -11,6 +11,8 @@ import { addWatcher, deleteWatcher, getWatchers } from '../jira/watchers.js';
 import { AddWatchersInput, GetWatchersInput, RemoveWatchersInput, ResolveAccountsInput } from '../tools/index.js';
 import { ensureFreshToken, getCloudId } from '../auth/session.js';
 import { resolveAccounts } from '../resolver/index.js';
+import { metrics } from '../lib/metrics.js';
+import { isHttpError } from '../lib/errors.js';
 import type { ResolveResult } from '../resolver/index.js';
 
 const config = loadConfig();
@@ -68,6 +70,7 @@ const server = http.createServer(async (req, res) => {
   // 簡易API: MCPツールと同等の動作をHTTPで確認
   if (url.pathname === '/api/watchers/add' && req.method === 'POST') {
     if (config.flags['feature.watchers'] === false) return send(res, 503, { error: 'feature_disabled' });
+    const started = Date.now();
     const body = await parseBody(req);
     const parsed = AddWatchersInput.safeParse(body);
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
@@ -90,6 +93,10 @@ const server = http.createServer(async (req, res) => {
           results.push({ accountId: id, ok: true });
         } catch (e: any) {
           results.push({ accountId: id, ok: false, error: e?.message });
+          if (isHttpError(e)) {
+            // サンプル単位で429を記録
+            metrics.recordAdd({ t: Date.now(), ok: false, ms: 0, code: e.status });
+          }
         }
       }
     }
@@ -97,11 +104,13 @@ const server = http.createServer(async (req, res) => {
     const successIds = results.filter((r) => r.ok).map((r) => r.accountId);
     const failures = results.filter((r) => !r.ok).map((r) => ({ accountId: r.accountId, error: r.error ?? 'unknown' }));
     log.info({ audit: true, category: 'watchers', action: 'ADD', actor: 'default', issueKey: input.issueKey, cloudId, targetIds: ids, successIds, failures });
+    metrics.recordAdd({ t: Date.now(), ok: failures.length === 0, ms: Date.now() - started });
     return send(res, 200, { results });
   }
 
   if (url.pathname === '/api/watchers/remove' && req.method === 'POST') {
     if (config.flags['feature.watchers'] === false) return send(res, 503, { error: 'feature_disabled' });
+    const started = Date.now();
     const body = await parseBody(req);
     const parsed = RemoveWatchersInput.safeParse(body);
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
@@ -124,6 +133,9 @@ const server = http.createServer(async (req, res) => {
           results.push({ accountId: id, ok: true });
         } catch (e: any) {
           results.push({ accountId: id, ok: false, error: e?.message });
+          if (isHttpError(e)) {
+            metrics.recordRemove({ t: Date.now(), ok: false, ms: 0, code: e.status });
+          }
         }
       }
     }
@@ -131,11 +143,13 @@ const server = http.createServer(async (req, res) => {
     const successIds = results.filter((r) => r.ok).map((r) => r.accountId);
     const failures = results.filter((r) => !r.ok).map((r) => ({ accountId: r.accountId, error: r.error ?? 'unknown' }));
     log.info({ audit: true, category: 'watchers', action: 'REMOVE', actor: 'default', issueKey: input.issueKey, cloudId, targetIds: ids, successIds, failures });
+    metrics.recordRemove({ t: Date.now(), ok: failures.length === 0, ms: Date.now() - started });
     return send(res, 200, { results });
   }
 
   if (url.pathname === '/api/watchers' && req.method === 'GET') {
     if (config.flags['feature.watchers'] === false) return send(res, 503, { error: 'feature_disabled' });
+    const started = Date.now();
     const parsed = GetWatchersInput.safeParse({ issueKey: url.searchParams.get('issueKey'), cloudId: url.searchParams.get('cloudId') ?? undefined });
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
     const user = await ensureFreshToken('default');
@@ -156,10 +170,12 @@ const server = http.createServer(async (req, res) => {
     const { GetWatchersOutput } = await import('../tools/index.js');
     const ok = GetWatchersOutput.parse(shaped);
     log.info({ audit: true, category: 'watchers', action: 'RESOLVE', actor: 'default', issueKey: parsed.data.issueKey, cloudId, hint: 'get_watchers' });
+    metrics.recordAdd({ t: Date.now(), ok: true, ms: Date.now() - started });
     return send(res, 200, ok);
   }
 
   if (url.pathname === '/api/resolve' && req.method === 'GET') {
+    const started = Date.now();
     const parsed = ResolveAccountsInput.safeParse({
       query: url.searchParams.get('query') ?? '',
       issueKey: url.searchParams.get('issueKey') ?? undefined,
@@ -197,6 +213,8 @@ const server = http.createServer(async (req, res) => {
       targetIds: [...resolvedIds, ...ambiguousIds],
       hint: out.hint,
     });
+    const outcome: 'resolved' | 'ambiguous' | 'none' = out.resolved ? 'resolved' : out.ambiguous ? 'ambiguous' : 'none';
+    metrics.recordResolve({ t: Date.now(), ok: outcome !== 'none', ms: Date.now() - started, outcome });
     return send(res, 200, out);
   }
 
