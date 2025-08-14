@@ -8,7 +8,9 @@ import { generateAuthUrl, handleCallback, getAccessibleResources } from '../oaut
 import { TokenStore } from '../storage/tokenStore.js';
 import { JiraClient } from '../jira/client.js';
 import { addWatcher, deleteWatcher, getWatchers } from '../jira/watchers.js';
-import { AddWatchersInput, GetWatchersInput, RemoveWatchersInput } from '../tools/index.js';
+import { AddWatchersInput, GetWatchersInput, RemoveWatchersInput, ResolveAccountsInput } from '../tools/index.js';
+import { ensureFreshToken, getCloudId } from '../auth/session.js';
+import { resolveAccounts } from '../resolver/index.js';
 
 const config = loadConfig();
 
@@ -65,9 +67,9 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req);
     const parsed = AddWatchersInput.safeParse(body);
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
-    const user = await TokenStore.get('default');
+    const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
-    const cloudId = parsed.data.cloudId ?? user.cloudId ?? (await TokenStore.getDefaultCloudId());
+    const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
     const client = new JiraClient({ cloudId, accessToken: user.accessToken });
     const results = [] as Array<{ accountId: string; ok: boolean; error?: string }>;
@@ -82,9 +84,9 @@ const server = http.createServer(async (req, res) => {
     const body = await parseBody(req);
     const parsed = RemoveWatchersInput.safeParse(body);
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
-    const user = await TokenStore.get('default');
+    const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
-    const cloudId = parsed.data.cloudId ?? user.cloudId ?? (await TokenStore.getDefaultCloudId());
+    const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
     const client = new JiraClient({ cloudId, accessToken: user.accessToken });
     const results = [] as Array<{ accountId: string; ok: boolean; error?: string }>;
@@ -98,13 +100,30 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/watchers' && req.method === 'GET') {
     const parsed = GetWatchersInput.safeParse({ issueKey: url.searchParams.get('issueKey'), cloudId: url.searchParams.get('cloudId') ?? undefined });
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
-    const user = await TokenStore.get('default');
+    const user = await ensureFreshToken('default');
     if (!user) return send(res, 401, { error: 'unauthorized' });
-    const cloudId = parsed.data.cloudId ?? user.cloudId ?? (await TokenStore.getDefaultCloudId());
+    const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
     const client = new JiraClient({ cloudId, accessToken: user.accessToken });
     const data = await getWatchers(client, parsed.data.issueKey);
     return send(res, 200, data);
+  }
+
+  if (url.pathname === '/api/resolve' && req.method === 'GET') {
+    const parsed = ResolveAccountsInput.safeParse({
+      query: url.searchParams.get('query') ?? '',
+      issueKey: url.searchParams.get('issueKey') ?? undefined,
+      limit: url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined,
+      cloudId: url.searchParams.get('cloudId') ?? undefined,
+    });
+    if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
+    const user = await ensureFreshToken('default');
+    if (!user) return send(res, 401, { error: 'unauthorized' });
+    const cloudId = await getCloudId('default', parsed.data.cloudId);
+    if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
+    const client = new JiraClient({ cloudId, accessToken: user.accessToken });
+    const out = await resolveAccounts(client, { query: parsed.data.query, issueKey: parsed.data.issueKey, maxResults: parsed.data.limit });
+    return send(res, 200, out);
   }
 
   send(res, 404, { error: 'not_found' });

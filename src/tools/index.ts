@@ -20,10 +20,10 @@ export const ResolveAccountsInput = z.object({
   mode: z.enum(['fuzzy', 'exact']).default('fuzzy'),
   disambiguation: z.enum(['ask', 'auto']).default('auto'),
   limit: z.number().int().positive().max(20).default(10),
+  cloudId: z.string().optional(),
 });
 
 export type AddWatchersInput = z.infer<typeof AddWatchersInput>;
 export type RemoveWatchersInput = z.infer<typeof RemoveWatchersInput>;
 export type GetWatchersInput = z.infer<typeof GetWatchersInput>;
 export type ResolveAccountsInput = z.infer<typeof ResolveAccountsInput>;
-

@@ -6,9 +6,11 @@ export type JiraClientOptions = {
 };
 
 export class JiraClient {
-  private base: string;
+  private base3: string;
+  private base2: string;
   constructor(private opts: JiraClientOptions) {
-    this.base = `https://api.atlassian.com/ex/jira/${opts.cloudId}/rest/api/3`;
+    this.base3 = `https://api.atlassian.com/ex/jira/${opts.cloudId}/rest/api/3`;
+    this.base2 = `https://api.atlassian.com/ex/jira/${opts.cloudId}/rest/api/2`;
   }
 
   private headers() {
@@ -20,16 +22,19 @@ export class JiraClient {
   }
 
   async get(path: string) {
-    return fetchJson(`${this.base}${path}`, { headers: this.headers() });
+    return fetchJson(`${this.base3}${path}`, { headers: this.headers() });
   }
 
   async post(path: string, body: any) {
     const payload = typeof body === 'string' ? body : JSON.stringify(body);
-    return fetchJson(`${this.base}${path}`, { method: 'POST', headers: this.headers(), body: payload });
+    return fetchJson(`${this.base3}${path}`, { method: 'POST', headers: this.headers(), body: payload });
   }
 
   async del(path: string) {
-    return fetchJson(`${this.base}${path}`, { method: 'DELETE', headers: this.headers() });
+    return fetchJson(`${this.base3}${path}`, { method: 'DELETE', headers: this.headers() });
+  }
+
+  async getV2(path: string) {
+    return fetchJson(`${this.base2}${path}`, { headers: this.headers() });
   }
 }
-
