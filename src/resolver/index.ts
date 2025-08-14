@@ -1,5 +1,6 @@
 import { JiraClient } from '../jira/client.js';
 import { isHttpError } from '../lib/errors.js';
+import { LruTtl } from '../lib/lru.js';
 
 export type ResolveResult = {
   resolved?: { accountId: string; displayName: string }[];
@@ -19,6 +20,8 @@ function normalizeQuery(q: string) {
     .toLowerCase();
 }
 
+const cache = new LruTtl<string, ResolveResult>(500, 60_000);
+
 export async function resolveAccounts(
   client: JiraClient,
   params: { query: string; issueKey?: string; maxResults?: number; mode?: 'fuzzy' | 'exact'; disambiguation?: 'ask' | 'auto' }
@@ -28,6 +31,9 @@ export async function resolveAccounts(
   const mode = params.mode ?? 'fuzzy';
   const dis = params.disambiguation ?? 'auto';
   const issueKey = params.issueKey ?? '';
+  const cacheKey = `${issueKey}::${mode}::${dis}::${query}`;
+  const hit = cache.get(cacheKey);
+  if (hit) return hit;
   try {
     const data = await client.getV2(
       `/user/viewissue/search?issueKey=${encodeURIComponent(issueKey)}&query=${encodeURIComponent(query)}&maxResults=${max}`
@@ -62,8 +68,11 @@ export async function resolveAccounts(
       // 最終バリデーション: issueKeyが指定されている場合、viewissue検索で再確認
       if (out.resolved && params.issueKey) {
         const ok = await validateViewability(client, params.issueKey, out.resolved);
-        return ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        cache.set(cacheKey, finalRes);
+        return finalRes;
       }
+      cache.set(cacheKey, out);
       return out;
     }
 
@@ -75,8 +84,11 @@ export async function resolveAccounts(
       const out = { resolved: top.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
       if (params.issueKey) {
         const ok = await validateViewability(client, params.issueKey, out.resolved!);
-        return ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        cache.set(cacheKey, finalRes);
+        return finalRes;
       }
+      cache.set(cacheKey, out);
       return out;
     }
     // 1件のみなら確定
@@ -84,12 +96,17 @@ export async function resolveAccounts(
       const out = { resolved: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
       if (params.issueKey) {
         const ok = await validateViewability(client, params.issueKey, out.resolved!);
-        return ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        cache.set(cacheKey, finalRes);
+        return finalRes;
       }
+      cache.set(cacheKey, out);
       return out;
     }
     // 複数→ambiguous（並びはスコア順）
-    return { ambiguous: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) };
+    const amb = { ambiguous: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
+    cache.set(cacheKey, amb);
+    return amb;
   } catch (e) {
     if (isHttpError(e)) {
       if (e.status === 403) return { none: true, hint: 'ユーザー検索権限不足（Browse users and groups）' };

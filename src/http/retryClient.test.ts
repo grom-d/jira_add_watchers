@@ -16,8 +16,7 @@ describe('fetchJson: 429/5xxは再試行', () => {
     const calls: number[] = [];
     // 1回目: 429, 2回目: 200
     // Retry-Afterを1にして、タイマーを進める
-    // @ts-expect-error override
-    global.fetch = vi.fn(async () => {
+    (global as any).fetch = vi.fn(async () => {
       calls.push(Date.now());
       if (calls.length === 1) return makeResponse(429, { message: 'rate' }, { 'retry-after': '1' });
       return makeResponse(200, { ok: true });
@@ -31,8 +30,7 @@ describe('fetchJson: 429/5xxは再試行', () => {
   });
 
   it('タイムアウトでHttpError(408)相当', async () => {
-    // @ts-expect-error override
-    global.fetch = vi.fn(async () => {
+    (global as any).fetch = vi.fn(async () => {
       const err: any = new Error('AbortError');
       err.name = 'AbortError';
       throw err;
