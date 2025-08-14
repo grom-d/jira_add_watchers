@@ -161,6 +161,8 @@ const server = http.createServer(async (req, res) => {
       query: url.searchParams.get('query') ?? '',
       issueKey: url.searchParams.get('issueKey') ?? undefined,
       limit: url.searchParams.get('limit') ? Number(url.searchParams.get('limit')) : undefined,
+      mode: (url.searchParams.get('mode') as any) ?? undefined,
+      disambiguation: (url.searchParams.get('disambiguation') as any) ?? undefined,
       cloudId: url.searchParams.get('cloudId') ?? undefined,
     });
     if (!parsed.success) return send(res, 400, { error: 'invalid_input', issues: parsed.error.issues });
@@ -168,8 +170,14 @@ const server = http.createServer(async (req, res) => {
     if (!user) return send(res, 401, { error: 'unauthorized' });
     const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
-    const client = new JiraClient({ cloudId, accessToken: user.accessToken });
-    const out = await resolveAccounts(client, { query: parsed.data.query, issueKey: parsed.data.issueKey, maxResults: parsed.data.limit });
+    const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
+    const out = await resolveAccounts(client, {
+      query: parsed.data.query,
+      issueKey: parsed.data.issueKey,
+      maxResults: parsed.data.limit,
+      mode: parsed.data.mode,
+      disambiguation: parsed.data.disambiguation,
+    });
     return send(res, 200, out);
   }
 
