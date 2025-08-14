@@ -13,6 +13,7 @@ import { ensureFreshToken, getCloudId } from '../auth/session.js';
 import { resolveAccounts } from '../resolver/index.js';
 import { metrics } from '../lib/metrics.js';
 import { isHttpError } from '../lib/errors.js';
+import { withHintText } from '../lib/i18n.js';
 import type { ResolveResult } from '../resolver/index.js';
 
 const config = loadConfig();
@@ -36,7 +37,12 @@ const server = http.createServer(async (req, res) => {
   const log = withReqId(reqId);
   const url = new URL(req.url ?? '/', `http://localhost:${config.PORT}`);
   if (url.pathname === '/health') return send(res, 200, { status: 'ok' });
-  if (url.pathname === '/ready') return send(res, 200, { status: 'ready' });
+  if (url.pathname === '/ready') {
+    const store = await TokenStore.selfCheck();
+    const keyOk = config.ENCRYPTION_KEY.length >= 32;
+    const ready = store.ok && keyOk;
+    return send(res, ready ? 200 : 503, { status: ready ? 'ready' : 'not_ready', checks: { tokenStore: store, encryptionKey: keyOk } });
+  }
 
   if (url.pathname === '/auth/atlassian/login' && req.method === 'GET') {
     const state = randomBytes(16).toString('hex');
@@ -202,13 +208,15 @@ const server = http.createServer(async (req, res) => {
     const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
     const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
-    const out: ResolveResult = await resolveAccounts(client, {
+    let out: ResolveResult = await resolveAccounts(client, {
       query: parsed.data.query,
       issueKey: parsed.data.issueKey,
       maxResults: parsed.data.limit,
       mode,
       disambiguation: parsed.data.disambiguation,
     });
+    // i18n: hintコードを日本語に解決
+    out = withHintText(out);
     // 監査ログ: RESOLVE（PII最小化。クエリはログしない/メールはハッシュ対象）
     const resolvedIds = out.resolved?.map((r) => r.accountId) ?? [];
     const ambiguousIds = out.ambiguous?.map((r) => r.accountId) ?? [];

@@ -81,12 +81,20 @@ export async function refreshAccessToken(refreshToken: string, cfg: AppConfig) {
 
 export type AccessibleResource = { id: string; name: string; scopes: string[] };
 
+import { LruTtl } from '../lib/lru.js';
+const resourcesCache = new LruTtl<string, AccessibleResource[]>(100, 10 * 60_000);
+
 export async function getAccessibleResources(accessToken: string): Promise<AccessibleResource[]> {
+  const key = accessToken.slice(0, 24); // tokenの先頭でキャッシュキー
+  const hit = resourcesCache.get(key);
+  if (hit) return hit;
   const res = await fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
     headers: { authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) throw new Error(`accessible_resources_failed: ${res.status}`);
-  return (await res.json()) as AccessibleResource[];
+  const json = (await res.json()) as AccessibleResource[];
+  resourcesCache.set(key, json);
+  return json;
 }
 
 export async function revokeToken(token: string, cfg: AppConfig): Promise<void> {

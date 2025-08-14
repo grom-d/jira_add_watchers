@@ -68,7 +68,7 @@ export async function resolveAccounts(
       // 最終バリデーション: issueKeyが指定されている場合、viewissue検索で再確認
       if (out.resolved && params.issueKey) {
         const ok = await validateViewability(client, params.issueKey, out.resolved);
-        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: 'hint.not_viewable_excluded' };
         cache.set(cacheKey, finalRes);
         return finalRes;
       }
@@ -84,7 +84,7 @@ export async function resolveAccounts(
       const out = { resolved: top.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
       if (params.issueKey) {
         const ok = await validateViewability(client, params.issueKey, out.resolved!);
-        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: 'hint.not_viewable_excluded' };
         cache.set(cacheKey, finalRes);
         return finalRes;
       }
@@ -96,7 +96,7 @@ export async function resolveAccounts(
       const out = { resolved: byScore.map(({ accountId, displayName }) => ({ accountId, displayName })) } as ResolveResult;
       if (params.issueKey) {
         const ok = await validateViewability(client, params.issueKey, out.resolved!);
-        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: '閲覧不可のため除外されました' };
+        const finalRes = ok.length > 0 ? { resolved: ok } : { none: true, hint: 'hint.not_viewable_excluded' };
         cache.set(cacheKey, finalRes);
         return finalRes;
       }
@@ -109,11 +109,11 @@ export async function resolveAccounts(
     return amb;
   } catch (e) {
     if (isHttpError(e)) {
-      if (e.status === 403) return { none: true, hint: 'ユーザー検索権限不足（Browse users and groups）' };
-      if (e.status === 404) return { none: true, hint: '課題が見つかりません（issueKeyを確認）' };
-      if (e.status === 400) return { none: true, hint: 'リクエストが不正です（入力を確認）' };
+      if (e.status === 403) return { none: true, hint: 'hint.no_permission' } as ResolveResult;
+      if (e.status === 404) return { none: true, hint: 'hint.issue_not_found' } as ResolveResult;
+      if (e.status === 400) return { none: true, hint: 'hint.invalid_request' } as ResolveResult;
     }
-    return { none: true, hint: '検索に失敗しました（ネットワーク/サーバー）' };
+    return { none: true, hint: 'hint.network_failure' } as ResolveResult;
   }
 }
 

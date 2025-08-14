@@ -112,6 +112,23 @@ export const TokenStore = {
     const s = await readStore();
     return s.defaultCloudId;
   },
+  async selfCheck(): Promise<{ ok: boolean; details: Record<string, boolean> }>{
+    try {
+      await ensureDir();
+      const s = await readStore();
+      // temp書き込み→削除
+      const key = `healthcheck-${Date.now()}`;
+      s.users[key] = { accessToken: 'x', refreshToken: 'y', expiresAt: Date.now() + 1000 } as any;
+      await writeStore(s);
+      const s2 = await readStore();
+      const okWrite = !!s2.users[key];
+      delete s2.users[key];
+      await writeStore(s2);
+      return { ok: okWrite, details: { writable: okWrite } };
+    } catch {
+      return { ok: false, details: { writable: false } };
+    }
+  }
 };
 
 // keytarは補助的に使用（将来の拡張）。
@@ -123,4 +140,3 @@ export async function tryKeytar() {
     return null;
   }
 }
-
