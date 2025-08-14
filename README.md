@@ -48,6 +48,10 @@ Jira Cloud のウォッチャー機能（追加・削除・取得）と、アカ
 
 1) 取得: `GET /api/watchers?issueKey=PROJ-123[&cloudId=...]`
 - 返却: `{ watchCount: number, watchers: [{ accountId, displayName, active? }] }`
+例:
+```
+curl "http://localhost:3000/api/watchers?issueKey=PROJ-123"
+```
 
 2) 追加: `POST /api/watchers/add`
 ```
@@ -59,6 +63,12 @@ Jira Cloud のウォッチャー機能（追加・削除・取得）と、アカ
 ```
 - 返却: `{ results: [{ accountId, ok, error? }, ...] }`
 - 並列数は `WATCHERS_CONCURRENCY`、部分成功を集計（重複追加はJira側が204のため成功扱い）
+例:
+```
+curl -X POST http://localhost:3000/api/watchers/add \
+  -H 'content-type: application/json' \
+  -d '{"issueKey":"PROJ-123","accountIds":["acc-1","acc-2"]}'
+```
 
 3) 削除: `POST /api/watchers/remove`
 ```
@@ -69,6 +79,12 @@ Jira Cloud のウォッチャー機能（追加・削除・取得）と、アカ
 }
 ```
 - 返却形式は追加と同様
+例:
+```
+curl -X POST http://localhost:3000/api/watchers/remove \
+  -H 'content-type: application/json' \
+  -d '{"issueKey":"PROJ-123","accountIds":["acc-1"]}'
+```
 
 4) 解決: `GET /api/resolve?query=<name>&issueKey=PROJ-123&mode=fuzzy&disambiguation=auto[&limit=10][&cloudId=...]`
 - 返却: 以下のいずれか
@@ -78,6 +94,10 @@ Jira Cloud のウォッチャー機能（追加・削除・取得）と、アカ
 - 仕様: 日本語向け正規化（NFKC、敬称除去、中黒/句読点/全角空白の統一、小文字化）+ スコアリング（完全一致>前方一致>部分一致、active優先）
 - `disambiguation=auto` は高スコア単一候補のみ自動確定
 - 最終バリデーション: `issueKey` 指定時、閲覧可能ユーザーに含まれるか再確認（不可なら除外）
+例:
+```
+curl "http://localhost:3000/api/resolve?query=田中さん&issueKey=PROJ-123&mode=fuzzy&disambiguation=auto"
+```
 
 Feature Flag:
 - `feature.watchers=false` の場合、`/api/watchers*` は 503 を返す
@@ -118,6 +138,10 @@ Feature Flag:
 ## MCPツール/スキーマ
 - `GET /mcp/tools` でツール一覧（スキーマURL付き）を取得
 - スキーマは `/schemas/*.json` で提供
+例:
+```
+curl http://localhost:3000/mcp/tools | jq .
+```
 
 ## CI/Docker
 - GitHub Actions: `.github/workflows/ci.yml`（build/test）

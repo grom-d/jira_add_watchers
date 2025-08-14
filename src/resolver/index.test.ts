@@ -48,7 +48,8 @@ describe('resolver: 正規化/ランキング/最終バリデーション', () =
 
   it('最終バリデーションで不可視候補は除外', async () => {
     const client = new FakeClient({});
-    const out = await resolveAccounts(client as any, { query: '田中', issueKey: 'PROJ-1', mode: 'fuzzy', disambiguation: 'auto' });
+    // キャッシュ衝突を避けるため別issueKeyを使用
+    const out = await resolveAccounts(client as any, { query: '田中', issueKey: 'PROJ-2', mode: 'fuzzy', disambiguation: 'auto' });
     expect(out.none).toBeTruthy();
   });
 });

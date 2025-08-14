@@ -56,6 +56,10 @@ export async function fetchJson(url: string, opts: RequestOptions = {}) {
       }
       throw new HttpError(res.status, json?.message ?? `HTTP ${res.status}`, hint, json);
     } catch (e: any) {
+      if (e instanceof HttpError) {
+        // 上流で整形済みのHTTPエラーはそのまま伝播
+        throw e;
+      }
       if (e?.name === 'AbortError') {
         throw new HttpError(408, 'リクエストがタイムアウトしました', 'timeout', e);
       }

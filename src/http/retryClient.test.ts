@@ -38,4 +38,25 @@ describe('fetchJson: 429/5xxは再試行', () => {
     const p = fetchJson('http://example.com', { timeoutMs: 1, retry: { retries: 0, baseMs: 1, maxMs: 1 } });
     await expect(p).rejects.toThrow();
   });
+
+  it('5xxからの自動再試行後に成功', async () => {
+    vi.useFakeTimers();
+    let n = 0;
+    (global as any).fetch = vi.fn(async () => {
+      n++;
+      if (n === 1) return makeResponse(500, { message: 'server boom' });
+      return makeResponse(200, { ok: true });
+    });
+    const p = fetchJson('http://example.com', { retry: { retries: 1, baseMs: 1, maxMs: 5 } });
+    await vi.runAllTimersAsync();
+    const res = await p;
+    expect(res).toEqual({ ok: true });
+    expect(n).toBe(2);
+  });
+
+  it('403は即時エラーでhint=forbidden', async () => {
+    (global as any).fetch = vi.fn(async () => makeResponse(403, { message: 'nope' }));
+    await expect(fetchJson('http://example.com', { retry: { retries: 0, baseMs: 1, maxMs: 1 } }))
+      .rejects.toMatchObject({ status: 403, hint: 'forbidden' });
+  });
 });
