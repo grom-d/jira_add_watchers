@@ -25,9 +25,27 @@ async function ensureDir() {
 
 function getKey(): Buffer {
   const { ENCRYPTION_KEY } = loadConfig();
-  // Use first 32 bytes of utf8 string as key. In production, pass raw 32-byte secret.
-  const key = Buffer.from(ENCRYPTION_KEY, 'utf8');
-  return key.length >= 32 ? key.subarray(0, 32) : Buffer.concat([key, Buffer.alloc(32 - key.length)]);
+  
+  // ENCRYPTION_KEY must be a base64-encoded 32-byte key
+  if (!ENCRYPTION_KEY) {
+    throw new Error('ENCRYPTION_KEY environment variable is required');
+  }
+  
+  // Validate base64 format for 32-byte key (44 characters including padding)
+  const base64Pattern = /^[A-Za-z0-9+/]{43}=$/;
+  if (!base64Pattern.test(ENCRYPTION_KEY)) {
+    throw new Error('ENCRYPTION_KEY must be a base64-encoded 32-byte key (44 characters). Generate one with: openssl rand -base64 32');
+  }
+  
+  try {
+    const key = Buffer.from(ENCRYPTION_KEY, 'base64');
+    if (key.length !== 32) {
+      throw new Error(`ENCRYPTION_KEY decoded to ${key.length} bytes, expected 32 bytes`);
+    }
+    return key;
+  } catch (error) {
+    throw new Error(`Invalid ENCRYPTION_KEY format: ${error instanceof Error ? error.message : 'unknown error'}`);
+  }
 }
 
 function encryptJson(obj: unknown): Buffer {
