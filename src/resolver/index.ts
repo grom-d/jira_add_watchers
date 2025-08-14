@@ -22,7 +22,7 @@ function normalizeQuery(q: string) {
 export async function resolveAccounts(
   client: JiraClient,
   params: { query: string; issueKey?: string; maxResults?: number; mode?: 'fuzzy' | 'exact'; disambiguation?: 'ask' | 'auto' }
-) {
+): Promise<ResolveResult> {
   const query = normalizeQuery(params.query);
   const max = params.maxResults ?? 10;
   const mode = params.mode ?? 'fuzzy';

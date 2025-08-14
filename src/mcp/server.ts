@@ -1,7 +1,7 @@
 // MCPサーバ雛形（実装は今後追加）
 import http from 'node:http';
 import { loadConfig } from '../config.js';
-import { logger } from '../logger.js';
+import { logger, withReqId } from '../logger.js';
 import { URL } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { generateAuthUrl, handleCallback, getAccessibleResources } from '../oauth/atlassian.js';
@@ -11,6 +11,7 @@ import { addWatcher, deleteWatcher, getWatchers } from '../jira/watchers.js';
 import { AddWatchersInput, GetWatchersInput, RemoveWatchersInput, ResolveAccountsInput } from '../tools/index.js';
 import { ensureFreshToken, getCloudId } from '../auth/session.js';
 import { resolveAccounts } from '../resolver/index.js';
+import type { ResolveResult } from '../resolver/index.js';
 
 const config = loadConfig();
 
@@ -29,6 +30,8 @@ async function parseBody(req: http.IncomingMessage): Promise<any> {
 }
 
 const server = http.createServer(async (req, res) => {
+  const reqId = randomBytes(8).toString('hex');
+  const log = withReqId(reqId);
   const url = new URL(req.url ?? '/', `http://localhost:${config.PORT}`);
   if (url.pathname === '/health') return send(res, 200, { status: 'ok' });
   if (url.pathname === '/ready') return send(res, 200, { status: 'ready' });
@@ -57,7 +60,7 @@ const server = http.createServer(async (req, res) => {
       if (defaultCloudId) await TokenStore.setDefaultCloudId(defaultCloudId);
       return send(res, 200, { ok: true, defaultCloudId });
     } catch (e: any) {
-      logger.error({ err: e?.message }, 'oauth callback error');
+      log.error({ err: e?.message }, 'oauth callback error');
       return send(res, 500, { error: 'oauth_failed' });
     }
   }
@@ -91,15 +94,9 @@ const server = http.createServer(async (req, res) => {
       }
     }
     await Promise.all(Array.from({ length: Math.min(limit, ids.length) }, () => worker()));
-    logger.info({
-      action: 'ADD',
-      actor: 'default',
-      issueKey: input.issueKey,
-      cloudId,
-      total: ids.length,
-      ok: results.filter(r => r.ok).length,
-      ng: results.filter(r => !r.ok).length,
-    }, 'watchers add results');
+    const successIds = results.filter((r) => r.ok).map((r) => r.accountId);
+    const failures = results.filter((r) => !r.ok).map((r) => ({ accountId: r.accountId, error: r.error ?? 'unknown' }));
+    log.info({ audit: true, category: 'watchers', action: 'ADD', actor: 'default', issueKey: input.issueKey, cloudId, targetIds: ids, successIds, failures });
     return send(res, 200, { results });
   }
 
@@ -131,15 +128,9 @@ const server = http.createServer(async (req, res) => {
       }
     }
     await Promise.all(Array.from({ length: Math.min(limit, ids.length) }, () => worker()));
-    logger.info({
-      action: 'REMOVE',
-      actor: 'default',
-      issueKey: input.issueKey,
-      cloudId,
-      total: ids.length,
-      ok: results.filter(r => r.ok).length,
-      ng: results.filter(r => !r.ok).length,
-    }, 'watchers remove results');
+    const successIds = results.filter((r) => r.ok).map((r) => r.accountId);
+    const failures = results.filter((r) => !r.ok).map((r) => ({ accountId: r.accountId, error: r.error ?? 'unknown' }));
+    log.info({ audit: true, category: 'watchers', action: 'REMOVE', actor: 'default', issueKey: input.issueKey, cloudId, targetIds: ids, successIds, failures });
     return send(res, 200, { results });
   }
 
@@ -164,6 +155,7 @@ const server = http.createServer(async (req, res) => {
     // 過剰プロパティはクライアントに返さない
     const { GetWatchersOutput } = await import('../tools/index.js');
     const ok = GetWatchersOutput.parse(shaped);
+    log.info({ audit: true, category: 'watchers', action: 'RESOLVE', actor: 'default', issueKey: parsed.data.issueKey, cloudId, hint: 'get_watchers' });
     return send(res, 200, ok);
   }
 
@@ -185,12 +177,25 @@ const server = http.createServer(async (req, res) => {
     const cloudId = await getCloudId('default', parsed.data.cloudId);
     if (!cloudId) return send(res, 400, { error: 'no_cloudId' });
     const client = new JiraClient({ cloudId, accessToken: user.accessToken, timeoutMs: config.REQUEST_TIMEOUT_MS });
-    const out = await resolveAccounts(client, {
+    const out: ResolveResult = await resolveAccounts(client, {
       query: parsed.data.query,
       issueKey: parsed.data.issueKey,
       maxResults: parsed.data.limit,
       mode,
       disambiguation: parsed.data.disambiguation,
+    });
+    // 監査ログ: RESOLVE（PII最小化。クエリはログしない/メールはハッシュ対象）
+    const resolvedIds = out.resolved?.map((r) => r.accountId) ?? [];
+    const ambiguousIds = out.ambiguous?.map((r) => r.accountId) ?? [];
+    log.info({
+      audit: true,
+      category: 'watchers',
+      action: 'RESOLVE',
+      actor: 'default',
+      issueKey: parsed.data.issueKey,
+      cloudId,
+      targetIds: [...resolvedIds, ...ambiguousIds],
+      hint: out.hint,
     });
     return send(res, 200, out);
   }
