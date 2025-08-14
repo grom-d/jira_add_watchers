@@ -9,7 +9,7 @@
     "start": "node dist/mcp/server.js",
     "lint": "eslint . --ext .ts",
     "format": "prettier -w .",
-    "test": "vitest run"
+    "test": "vitest run --pool=forks"
   },
   "dependencies": {
     "undici": "^6.19.8",
