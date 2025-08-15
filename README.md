@@ -16,7 +16,7 @@ Jira Cloud のウォッチャー機能（追加・削除・取得）と、アカ
 2) Atlassian OAuth アプリ
 - Authorization URL: `https://auth.atlassian.com/authorize`
 - Token URL: `https://auth.atlassian.com/oauth/token`
-- Scopes: `offline_access read:user:jira read:issue.watcher:jira write:issue.watcher:jira`
+- Scopes: `offline_access read:jira-user read:jira-work write:jira-work`
 - Redirect URI: 例 `http://localhost:3000/auth/atlassian/callback`
 
 3) .env 設定（`.env.example` を参照）

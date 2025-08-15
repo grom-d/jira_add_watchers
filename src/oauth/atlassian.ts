@@ -16,7 +16,11 @@ export function generateAuthUrl(state: string, cfg: AppConfig) {
   const params = new URLSearchParams({
     audience: 'api.atlassian.com',
     client_id: cfg.ATLAS_CLIENT_ID,
-    scope: 'offline_access read:user:jira read:issue.watcher:jira write:issue.watcher:jira',
+    // Atlassian OAuth 2.0 (3LO) の正しいスコープ
+    //  - read:jira-user: ユーザー検索など
+    //  - read:jira-work: 課題の読み取り（ウォッチャー一覧など）
+    //  - write:jira-work: 課題の更新（ウォッチャー追加/削除）
+    scope: 'offline_access read:jira-user read:jira-work write:jira-work',
     redirect_uri: cfg.REDIRECT_URI,
     state,
     response_type: 'code',
