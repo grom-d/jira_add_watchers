@@ -46,6 +46,12 @@ describe('resolver: 正規化/ランキング/最終バリデーション', () =
     expect(out.ambiguous && out.ambiguous.length).toBeGreaterThan(1);
   });
 
+  it('中黒・全角空白・句読点を正規化し前方一致を優先', async () => {
+    const client = new FakeClient({ '田中 太郎': 'tanaka-taro' });
+    const out = await resolveAccounts(client as any, { query: '田中・太郎', issueKey: 'PR-3', mode: 'fuzzy', disambiguation: 'auto' });
+    expect(out.resolved?.[0]?.accountId).toBe('tanaka-taro');
+  });
+
   it('最終バリデーションで不可視候補は除外', async () => {
     const client = new FakeClient({});
     // キャッシュ衝突を避けるため別issueKeyを使用
